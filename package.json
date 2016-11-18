@@ -1,0 +1,37 @@
+{
+  "name": "enrise-lock",
+  "description": "Lock functionality used within Enrise projects and module's",
+  "version": "0.1.0",
+  "author": "Team MatchMinds @ Enrise",
+  "main": "index.js",
+  "license": "MIT",
+  "engines": {
+    "node": ">=4.0.0"
+  },
+  "scripts": {
+    "lint": "eslint index.js test",
+    "unittest": "mocha test/*.spec.js",
+    "cover": "istanbul cover _mocha -- -R spec test/*.spec.js; istanbul check-coverage",
+    "test": "npm run lint && npm run cover"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Enrise/node-lock"
+  },
+  "bugs": {
+    "url": "https://github.com/Enrise/node-lock/issues"
+  },
+  "dependencies": {
+    "lodash": "^4.16.4"
+  },
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "coveralls": "^2.11.14",
+    "eslint": "^3.8.1",
+    "eslint-config-mm": "^1.1.1",
+    "istanbul": "^0.4.5",
+    "mocha": "^3.1.2",
+    "sinon": "^1.17.6",
+    "sinon-chai": "^2.8.0"
+  }
+}
