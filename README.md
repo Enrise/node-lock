@@ -37,3 +37,24 @@ Retrieve a list of all current locks. Callback will be called with parameters `[
 
 #### `lock.delete(callback: function)`
 Delete the entire lock-index. Callback will be called with parameter `[err]`.
+
+### Example
+```js
+const lock = new require('enrise-lock')({
+  esClient: new require('elasticsearch').Client(),
+  index: 'globallock',
+  type: 'lockdocument'
+});
+
+// Set lock
+lock.acquire('my-resource', 'owner', (err, success) => {
+  // Do some asynchronous operation
+  // ...
+
+  // Release lock
+  lock.release('my-resource', 'owner', (err, success) => {
+  	// ...
+  });
+});
+
+```
