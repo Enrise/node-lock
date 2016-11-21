@@ -11,7 +11,8 @@ describe('Lock', () => {
   const lock = new Lock({
     esClient: esClientStub,
     index: 'lock-index',
-    type: 'lock-type'
+    type: 'lock-type',
+    owner: 'unittest'
   });
 
   beforeEach(() => {
@@ -25,9 +26,34 @@ describe('Lock', () => {
     expect(Lock).to.be.a.function;
   });
 
+  it('defaults type to lockdocument', () => {
+    const newLock = new Lock({
+      esClient: esClientStub,
+      owner: 'unittest',
+      index: 'lock-index'
+    });
+    expect(newLock.type).to.equal('lockdocument');
+  });
+
+  it('throws an error if owner is invalid or not specified', () => {
+    expect(() => {
+      new Lock({ // eslint-disable-line no-new
+        esClient: esClientStub,
+        index: 'lock-index'
+      });
+    }).to.throw(Error);
+    expect(() => {
+      new Lock({ // eslint-disable-line no-new
+        esClient: esClientStub,
+        index: 'lock-index',
+        owner: ''
+      });
+    }).to.throw(Error);
+  });
+
   describe('acquire and release functionality', () => {
     it('returns true when a lock for a resource is requested', (done) => {
-      lock.acquire('testresource', 'unittest', (err, result) => {
+      lock.acquire('testresource', (err, result) => {
         expect(result).to.be.true;
         expect(esClientStub.create).to.have.been.calledOnce;
         expect(esClientStub.create).to.have.been.calledWith({
@@ -45,12 +71,12 @@ describe('Lock', () => {
     });
 
     it('succesfully acquires and releases a lock for a resource', (done) => {
-      lock.acquire('testresource', 'unittest', (acquireError, result) => {
+      lock.acquire('testresource', (acquireError, result) => {
         expect(result).to.be.true;
         expect(esClientStub.create).to.have.been.calledOnce;
         expect(esClientStub.create).to.have.been.calledWithMatch({body: {owner: 'unittest'}, id: 'testresource'});
         expect(esClientStub.delete).to.not.have.been.called;
-        lock.release('testresource', 'unittest', (releaseError) => {
+        lock.release('testresource', (releaseError) => {
           expect(esClientStub.create).to.have.been.calledOnce;
           expect(esClientStub.delete).to.have.been.calledOnce;
           expect(esClientStub.delete).to.have.been.calledWith({
@@ -65,21 +91,21 @@ describe('Lock', () => {
     });
 
     it('succesfully acquires and releases locks for different resources in incorrect order', (done) => {
-      lock.acquire('testresource1', 'unittest', (acquireError1, result1) => {
+      lock.acquire('testresource1', (acquireError1, result1) => {
         expect(result1).to.be.true;
         expect(esClientStub.create).to.have.been.calledOnce;
         expect(esClientStub.create).to.have.been.calledWithMatch({body: {owner: 'unittest'}, id: 'testresource1'});
         expect(esClientStub.delete).to.not.have.been.called;
-        lock.acquire('testresource2', 'unittest', (acquireError2, result2) => {
+        lock.acquire('testresource2', (acquireError2, result2) => {
           expect(result2).to.be.true;
           expect(esClientStub.create).to.have.been.calledTwice;
           expect(esClientStub.create).to.have.been.calledWithMatch({body: {owner: 'unittest'}, id: 'testresource2'});
           expect(esClientStub.delete).to.not.have.been.called;
-          lock.release('testresource1', 'unittest', (releaseError1) => {
+          lock.release('testresource1', (releaseError1) => {
             expect(esClientStub.create).to.have.been.calledTwice;
             expect(esClientStub.delete).to.have.been.calledOnce;
             expect(esClientStub.delete).to.have.been.calledWithMatch({id: 'testresource1'});
-            lock.release('testresource2', 'unittest', (releaseError2) => {
+            lock.release('testresource2', (releaseError2) => {
               expect(esClientStub.create).to.have.been.calledTwice;
               expect(esClientStub.delete).to.have.been.calledTwice;
               expect(esClientStub.delete).to.have.been.calledWithMatch({id: 'testresource2'});
@@ -91,14 +117,14 @@ describe('Lock', () => {
     });
 
     it('fails to acquire a second lock on a resource', (done) => {
-      lock.acquire('testresource', 'unittest', (acquireError1, result1) => {
+      lock.acquire('testresource', (acquireError1, result1) => {
         expect(result1).to.be.true;
         expect(esClientStub.create).to.have.been.calledOnce;
         expect(esClientStub.create).to.have.been.calledWithMatch({body: {owner: 'unittest'}, id: 'testresource'});
         expect(esClientStub.delete).to.not.have.been.called;
 
         esClientStub.create.onCall(1).callsArgWith(1, {status: 409});
-        lock.acquire('testresource', 'unittest', (acquireError2, result2) => {
+        lock.acquire('testresource', (acquireError2, result2) => {
           expect(result2).to.be.false;
           expect(esClientStub.create).to.have.been.calledTwice;
           expect(esClientStub.delete).to.not.have.been.called;
@@ -108,14 +134,15 @@ describe('Lock', () => {
     });
 
     it('throws an error when a parameter is missing when acquiring a lock', (done) => {
-      expect(() => {lock.acquire('justone', () => {});}).to.throw(Error);
+      expect(() => {lock.acquire('justone');}).to.throw(Error);
+      expect(() => {lock.acquire(() => {});}).to.throw(Error);
       done();
     });
 
     it('returns false when there is no lock to release', (done) => {
       esClientStub.delete = sinon.stub();
       esClientStub.delete.callsArgWith(1, null, {found: false});
-      lock.release('testresource', 'unittest', (error, result) => {
+      lock.release('testresource', (error, result) => {
         expect(result).to.be.undefined;
         expect(error).to.be.an('Error');
         expect(esClientStub.delete).to.have.been.calledOnce;
@@ -127,7 +154,7 @@ describe('Lock', () => {
     it('returns false when resource about to acquire is already locked', (done) => {
       esClientStub.create = sinon.stub();
       esClientStub.create.callsArgWith(1, {status: 409});
-      lock.acquire('testresource', 'unittest', (error) => {
+      lock.acquire('testresource', (error) => {
         expect(esClientStub.create).to.have.been.calledOnce;
         expect(esClientStub.create).to.have.been.calledWithMatch({id: 'testresource'});
         expect(esClientStub.delete).to.not.have.been.called;
@@ -139,10 +166,10 @@ describe('Lock', () => {
       esClientStub.create.callsArgWith(1, new Error('testCreate'));
       esClientStub.delete = sinon.stub();
       esClientStub.delete.callsArgWith(1, new Error('testDelete'));
-      lock.acquire('testresource', 'unittest', (acquireError, acquireResult) => {
+      lock.acquire('testresource', (acquireError, acquireResult) => {
         expect(acquireError).to.be.an('Error');
         expect(acquireResult).to.be.undefined;
-        lock.release('testresource', 'unittest', (releaseError) => {
+        lock.release('testresource', (releaseError) => {
           expect(releaseError).to.be.an('Error');
           done();
         });

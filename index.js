@@ -1,37 +1,37 @@
 'use strict';
 
 const _ = require('lodash');
+const defaultType = 'lockdocument';
 
 // verifyParameters just verifies the three provided parameters so the callback will only be inspected, not used
-function verifyParameters(resource, owner, cb) {
+function verifyParameters(resource, cb) {
 
   // Callback might be one of the incorrect parameters, so can't use the callback
-  if (!(_.isString(resource) && _.isString(owner) && _.isFunction(cb) && resource.length && owner.length && cb)) {
+  if (!(_.isString(resource) && _.isFunction(cb) && resource.length && cb)) {
     throw new Error('Incorrect parameter(s)');
   }
 }
 
 class Lock {
   constructor(settings) {
+    if (!_.isString(settings.owner) || !settings.owner) {
+      throw new Error('Owner must a string');
+    }
+
     this.esClient = settings.esClient;
     this.index = settings.index;
-    this.type = settings.type;
+    this.type = settings.type || defaultType;
+    this.owner = settings.owner;
   }
 
-  acquire(resource, owner, cb) {
-    verifyParameters(resource, owner, cb);
-    this._acquireLock({
-      resource: resource,
-      owner: owner
-    }, cb);
+  acquire(resource, cb) {
+    verifyParameters(resource, cb);
+    this._acquireLock(resource, cb);
   }
 
-  release(resource, owner, cb) {
-    verifyParameters(resource, owner, cb);
-    this._releaseLock({
-      resource: resource,
-      owner: owner
-    }, cb);
+  release(resource, cb) {
+    verifyParameters(resource, cb);
+    this._releaseLock(resource, cb);
   }
 
   isLocked(resource, cb) {
@@ -73,12 +73,14 @@ class Lock {
   }
 
   // 'Private' methods
-  _acquireLock(req, cb) {
+  _acquireLock(resource, cb) {
     const lockDocument = {
-      body: _.omit(req, 'resource'),
+      body: {
+        owner: this.owner
+      },
       index: this.index,
       type: this.type,
-      id: req.resource,
+      id: resource,
       refresh: true
     };
 
@@ -92,14 +94,14 @@ class Lock {
     });
   }
 
-  _releaseLock(req, cb) {
+  _releaseLock(resource, cb) {
     this.esClient.delete({
       index: this.index,
       type: this.type,
-      id: req.resource,
+      id: resource,
       refresh: true
     }, (deleteError, response) => {
-      cb(deleteError || (response.found ? null : new Error('Missing lockdocument for request', req)));
+      cb(deleteError || (response.found ? null : new Error('Missing lockdocument for resource', resource)));
     });
   }
 }
