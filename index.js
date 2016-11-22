@@ -12,98 +12,100 @@ function verifyParameters(resource, cb) {
   }
 }
 
-class Lock {
-  constructor(settings) {
-    if (!_.isString(settings.owner) || !settings.owner) {
-      throw new Error('Owner must a string');
+function Lock(settings) {
+  if (!(this instanceof Lock)) {
+    return new Lock(settings);
+  }
+
+  if (!_.isString(settings.owner) || !settings.owner) {
+    throw new Error('Owner must a string');
+  }
+
+  this.esClient = settings.esClient;
+  this.index = settings.index;
+  this.type = settings.type || defaultType;
+  this.owner = settings.owner;
+}
+
+Lock.prototype.acquire = function (resource, cb) {
+  verifyParameters(resource, cb);
+  this._acquireLock(resource, cb);
+};
+
+Lock.prototype.release = function (resource, cb) {
+  verifyParameters(resource, cb);
+  this._releaseLock(resource, cb);
+};
+
+Lock.prototype.isLocked = function (resource, cb) {
+  this.esClient.get({
+    index: this.index,
+    type: this.type,
+    id: resource
+  }, (lockErr, lockRes, statusCode) => {
+    if (statusCode === 404) {
+      return cb(null, false);
     }
 
-    this.esClient = settings.esClient;
-    this.index = settings.index;
-    this.type = settings.type || defaultType;
-    this.owner = settings.owner;
-  }
+    cb(lockErr, true, _.get(lockRes, '_source.owner'));
+  });
+};
 
-  acquire(resource, cb) {
-    verifyParameters(resource, cb);
-    this._acquireLock(resource, cb);
-  }
+Lock.prototype.list = function (cb) {
+  this.esClient.search({
+    index: this.index,
+    type: this.type
+  }, (lockErr, locksRes, statusCode) => {
+    if (statusCode === 404) {
+      return cb(null, false);
+    }
 
-  release(resource, cb) {
-    verifyParameters(resource, cb);
-    this._releaseLock(resource, cb);
-  }
+    cb(lockErr, _.reduce(_.get(locksRes, 'hits.hits'), (locks, lockDocument) => {
+      locks[lockDocument._id] = lockDocument._source;
+      return locks;
+    }, {}));
+  });
+};
 
-  isLocked(resource, cb) {
-    this.esClient.get({
-      index: this.index,
-      type: this.type,
-      id: resource
-    }, (lockErr, lockRes, statusCode) => {
-      if (statusCode === 404) {
-        return cb(null, false);
-      }
+Lock.prototype.delete = function (cb) {
+  this.esClient.indices.delete({
+    index: this.index
+  }, (deleteError) => {
+    cb(deleteError);
+  });
+};
 
-      cb(lockErr, true, _.get(lockRes, '_source.owner'));
-    });
-  }
+// 'Private' methods
+Lock.prototype._acquireLock = function (resource, cb) {
+  const lockDocument = {
+    body: {
+      owner: this.owner
+    },
+    index: this.index,
+    type: this.type,
+    id: resource,
+    refresh: true
+  };
 
-  list(cb) {
-    this.esClient.search({
-      index: this.index,
-      type: this.type
-    }, (lockErr, locksRes, statusCode) => {
-      if (statusCode === 404) {
-        return cb(null, false);
-      }
+  this.esClient.create(lockDocument, (err, res) => {
+    // Lock (document) already exists
+    if (err && err.status === 409) {
+      return cb(null, false);
+    }
 
-      cb(lockErr, _.reduce(_.get(locksRes, 'hits.hits'), (locks, lockDocument) => {
-        locks[lockDocument._id] = lockDocument._source;
-        return locks;
-      }, {}));
-    });
-  }
+    cb(err, res && res.created);
+  });
+};
 
-  delete(cb) {
-    this.esClient.indices.delete({
-      index: this.index
-    }, (deleteError) => {
-      cb(deleteError);
-    });
-  }
-
-  // 'Private' methods
-  _acquireLock(resource, cb) {
-    const lockDocument = {
-      body: {
-        owner: this.owner
-      },
-      index: this.index,
-      type: this.type,
-      id: resource,
-      refresh: true
-    };
-
-    this.esClient.create(lockDocument, (err, res) => {
-      // Lock (document) already exists
-      if (err && err.status === 409) {
-        return cb(null, false);
-      }
-
-      cb(err, res && res.created);
-    });
-  }
-
-  _releaseLock(resource, cb) {
-    this.esClient.delete({
-      index: this.index,
-      type: this.type,
-      id: resource,
-      refresh: true
-    }, (deleteError, response) => {
-      cb(deleteError || (response.found ? null : new Error('Missing lockdocument for resource', resource)));
-    });
-  }
-}
+Lock.prototype._releaseLock = function (resource, cb) {
+  this.esClient.delete({
+    index: this.index,
+    type: this.type,
+    id: resource,
+    refresh: true
+  }, (deleteError, response) => {
+    cb(deleteError || (response.found ? null : new Error('Missing lockdocument for resource', resource)));
+  });
+};
 
 module.exports = Lock;
