@@ -35,6 +35,16 @@ describe('Lock', () => {
     expect(newLock.type).to.equal('lockdocument');
   });
 
+
+  it('instantiates without keyword new', () => {
+    const newLock = Lock({ // eslint-disable-line new-cap
+      esClient: esClientStub,
+      owner: 'unittest',
+      index: 'lock-index'
+    });
+    expect(newLock.type).to.equal('lockdocument');
+  });
+
   it('throws an error if owner is invalid or not specified', () => {
     expect(() => {
       new Lock({ // eslint-disable-line no-new
