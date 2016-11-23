@@ -25,6 +25,8 @@ function Lock(settings) {
   this.index = settings.index;
   this.type = settings.type || defaultType;
   this.owner = settings.owner;
+
+  _.bindAll(this, _.keys(Lock.prototype));
 }
 
 Lock.prototype.acquire = function (resource, cb) {
