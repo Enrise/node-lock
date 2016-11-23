@@ -1,5 +1,6 @@
 'use strict';
 
+const _ = require('lodash');
 const chai = require('chai');
 const sinon = require('sinon');
 const expect = chai.expect;
@@ -59,6 +60,30 @@ describe('Lock', () => {
         owner: ''
       });
     }).to.throw(Error);
+  });
+
+  it('binds all methods to the current scope', () => {
+    const bindAll = _.bindAll;
+    _.bindAll = sinon.stub();
+
+    const newLock = new Lock({
+      esClient: esClientStub,
+      index: 'lock-index',
+      type: 'lock-type',
+      owner: 'unittest'
+    });
+
+    expect(_.bindAll).to.have.been.calledWith(newLock, [
+      'acquire',
+      'release',
+      'isLocked',
+      'list',
+      'delete',
+      '_acquireLock',
+      '_releaseLock'
+    ]);
+
+    _.bindAll = bindAll;
   });
 
   describe('acquire and release functionality', () => {
