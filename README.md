@@ -7,6 +7,10 @@
 
 > An elasticsearch based lock mechanism for resources and ownership.
 
+## Deprecated
+
+This repository is deprecated and will be archived.
+
 ### Introduction
 This module provides abstraction methods to lock a resource with an owner. The owner is the name of the process requesting a lock. The resource would be the specific element/index/endpoint/etc.. that requires locking.
 
